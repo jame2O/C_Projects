@@ -2,14 +2,22 @@
 #include <string.h>
 #include <stdlib.h>
 #include <windows.h>
-// Handles the game logic
-int game() {
-    int chip = createBet();
-}
+
+// Create the required types.
+
+typedef struct Bet {
+    int amount;
+    char type[3];
+} Bet;
+
 // Calculates the winnings based off the result.
 int payout() {
-    int betAmount;
-    char betType[13][2][20] = {{"su", "Straight Up"},
+      
+}
+// Handles the setting up of the bet- the amount and the type of bet
+Bet createBet() {
+    Bet newBet;
+    char betTypes[13][2][20] = {{"su", "Straight Up"},
                                {"sp", "Split"},
                                {"st", "Street"},
                                {"cb", "Corner Bet"},
@@ -23,18 +31,30 @@ int payout() {
                                {"cl", "Colours"},
                                {"oe", "Odd/Even"}};
 
-    printf("\nPlease enter your bet amount: ");
-    scanf("%d", betAmount);
+    printf("\nPlease enter your bet amount (in dollars): ");
+    scanf("%d", newBet.amount);
     printf("\nYou're betting $%d. Please enter your bet type. You can choose from: ", betAmount);
-    
-
-
+    for (int i=0; i< 13; i++) {
+        char betTypeName[20];
+        char betTypeAb[20];
+        strcpy(betTypeName, betTypes[i][1]);
+        strcpy(betTypeAb, betTypes[i][0]);
+        printf("\n%d. ", i+1);
+        printf("%s:", betTypeName);
+        printf(" (%s),", betTypeAb);
+    }
+    printf("Enter your choice code: ");
+    char betType[3];
+    scanf("%2s", newBet.type);
+    return newBet;
 }
-// Handles the setting up of the bet- the amount and the type of bet
-char createBet() {
-
+int game() {
+    Bet current_bet = createBet();
 }
 // Main func
 int main() {
     printf("Welcome to Roulette!");
+    game();
+    
+    return 0;
 }
