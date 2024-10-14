@@ -33,7 +33,7 @@ Bet createBet() {
 
     printf("\nPlease enter your bet amount (in dollars): ");
     scanf("%d", newBet.amount);
-    printf("\nYou're betting $%d. Please enter your bet type. You can choose from: ", betAmount);
+    printf("\nYou're betting $%d. Please enter your bet type. You can choose from: ", newBet.amount);
     for (int i=0; i< 13; i++) {
         char betTypeName[20];
         char betTypeAb[20];
@@ -43,13 +43,15 @@ Bet createBet() {
         printf("%s:", betTypeName);
         printf(" (%s),", betTypeAb);
     }
-    printf("Enter your choice code: ");
+    printf("\nEnter your choice code: ");
     char betType[3];
     scanf("%2s", newBet.type);
     return newBet;
 }
 int game() {
+    // Setup the bet.
     Bet current_bet = createBet();
+    
 }
 // Main func
 int main() {
