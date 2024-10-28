@@ -6,10 +6,38 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define MAX_PORT 65535
+#define MAX_IP 255
+
 typedef struct Rule {
     char ip[2][8];
     int ports[2];
 } Rule;
+
+int validateIp(char *ip) {
+    //IP Validation
+    int dotCount;
+    while (*ip) {
+        if (*ip == '.') {
+            dotCount++;
+        };
+        ip++;
+    }
+    if (dotCount != 3) return 0;
+    char* nextSplit = strtok(ip, ".");
+    //Check if numbers are valid
+    while (nextSplit != NULL) {
+        if (atoi(nextSplit) > MAX_IP || atoi(nextSplit) > 0 || atoi(nextSplit) == 0) return -1;
+    }
+    return 1;
+    
+}
+
+int validatePort(char *port) {
+    //Port Validation
+    if (atoi(port) < 0 || atoi(port) > MAX_PORT) return -1;
+    return 1;
+}
 
 void printRequests(char* reqs, int pos) {
     //Loop through the request array, printing each one
@@ -17,6 +45,7 @@ void printRequests(char* reqs, int pos) {
         printf("%c\n", reqs[i]);
     }
 }
+
 int addRule(int pos, int cap, Rule* rules) {
     // Checks if we need to add more memory to the rules list.
     if (pos >= cap)
@@ -29,51 +58,46 @@ int addRule(int pos, int cap, Rule* rules) {
     char *inpBuf = NULL;
     size_t bufSize = 0;
     size_t inpChars;
-
     inpBuf = (char*)malloc(bufSize * sizeof(char));
     inpChars = 0;
 
     printf("\n- Please enter a new rule in the form <IPAddress> <ports>: ");
     inpChars = getline(&inpBuf, &bufSize, stdin);
-    
-    //IP Checks
-    char *end = inpBuf;
-    char *start = inpBuf;
-    //Split IP & Port
-    while (*end != ' ' && *end != '\0') {
-        end++;
+    printf("%zu", inpChars); //Make gcc happy!
+    //Split IP & Port & check validation
+    char ips[50], ports[50];
+    if (sscanf(inpBuf, "%s %s", ips, ports) != 2) {
+        printf("\nInvalid rule");
+        return 0;
     }
-    char* ip = (char*)malloc((end-start)+1)
-    strncpy(ip, start, (end-start));
-    start = end;
-    while (*end != '\0') {
-        end++;
-    }
-    char* port = (char*)malloc((end-start)+1)
-    strncpy(port, start, (end-start));
-
-    //IP Validation
-    start = ip;
-    end = ip;
-    while (*end != '\0') {
-        while (*end != '-' && *end != '\0') {
-            end++;
-        }
-        int ipLen = end - start;
-        if (ipLen != 15) { //Length Check
+    //Check the IP and split if nescessary, then verify 
+    if (strchr(ips, '-')) { //Multiple case
+        char ip1[20], ip2[20];
+        sscanf(ips, "%[^-]-%s", ip1, ip2);
+        if (validateIp(ip1) == -1 || validateIp(ip2) == -1) {
             printf("\nInvalid rule");
             return 0;
         }
-        char* token = (char*)malloc(tokLen + 1);
-        strncpy(token, start, tokLen);
-
-        if ((atoi(token) == 0) || (atoi(token) < 0) || (atoi(token) > 255)) { //Num check
+    } else {
+        if (validateIp(ips) == -1) {
             printf("\nInvalid rule");
             return 0;
         }
-        
-        free(token);
     }
+    //Check the port and split if nescessary, then verify
+    if (strchr(ports, '-')) { //Multiple case
+            char port1[10], port2[20];
+            sscanf(ports, "%[^-]-%s", port1, port2);
+            if (validatePort(port1) == -1 || validatePort(port2) == -1 || port2 >= port1) {
+                printf("\nInvalid rule");
+                return 0;
+            }
+        } else {
+            if (validatePort(ports) == -1) {
+                printf("\nInvalid rule");
+                return 0;
+            }
+        }
     //Add to the rules list
 
     //Print response
