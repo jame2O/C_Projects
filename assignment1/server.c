@@ -1,8 +1,5 @@
-// NOTE: WINDOWS DECS ONLY. GET RID IF TESTING ON LINUX!
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <pthread.h>
-#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -16,6 +13,7 @@ typedef struct Rule {
 
 int validateIp(char *ip) {
     //IP Validation
+    printf("Validating");
     int dotCount;
     while (*ip) {
         if (*ip == '.') {
@@ -23,16 +21,30 @@ int validateIp(char *ip) {
         };
         ip++;
     }
-    if (dotCount != 3) return 0;
+    if (dotCount != 3) return -1;
     char* nextSplit = strtok(ip, ".");
     //Check if numbers are valid
     while (nextSplit != NULL) {
-        if (atoi(nextSplit) > MAX_IP || atoi(nextSplit) > 0 || atoi(nextSplit) == 0) return -1;
+        if (atoi(nextSplit) > MAX_IP || atoi(nextSplit) < 0 || atoi(nextSplit) == 0) return -1;
+        nextSplit = strtok(NULL, ".");
     }
     return 1;
     
 }
-
+int compareIps(char* ip1, char* ip2) {
+    char* ip1Split = strtok(ip1, ".");
+    char* ip2Split = strtok(ip2, ".");
+    //Compare each number (don't have to worry about invalid strings since they've already been checked)
+    while (ip1Split != NULL && ip2Split != NULL) {
+        if (atoi(ip1Split) < atoi(ip2Split)) {
+            return -1;
+        } else {
+            ip1Split = strtok(NULL, ".");
+            ip2Split = strtok(NULL, ".");
+        }
+    }
+    return 1;
+}
 int validatePort(char *port) {
     //Port Validation
     if (atoi(port) < 0 || atoi(port) > MAX_PORT) return -1;
@@ -60,10 +72,12 @@ int addRule(int pos, int cap, Rule* rules) {
     size_t inpChars;
     inpBuf = (char*)malloc(bufSize * sizeof(char));
     inpChars = 0;
-
+    if (inpChars) {
+        printf("willy");
+    } // Make gcc happy 
     printf("\n- Please enter a new rule in the form <IPAddress> <ports>: ");
     inpChars = getline(&inpBuf, &bufSize, stdin);
-    printf("%zu", inpChars); //Make gcc happy!
+    printf("check");
     //Split IP & Port & check validation
     char ips[50], ports[50];
     if (sscanf(inpBuf, "%s %s", ips, ports) != 2) {
@@ -77,6 +91,11 @@ int addRule(int pos, int cap, Rule* rules) {
         if (validateIp(ip1) == -1 || validateIp(ip2) == -1) {
             printf("\nInvalid rule");
             return 0;
+        } else {
+            if (compareIps(ip1, ip2) == -1) {
+                printf("\nInvalid rule");
+                return 0;
+            }
         }
     } else {
         if (validateIp(ips) == -1) {
@@ -119,7 +138,7 @@ int main (int argc, char ** argv) {
     rules = (Rule*)malloc(ruleCap*sizeof(Rule));
     
     // Run the program indefinetly
-    while (true) {
+    while (1) {
 
         //Checks if we need to add more memory to the request list.
         if (reqPos >= reqCap) {
