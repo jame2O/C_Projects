@@ -2,6 +2,9 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define MAX_PORT 65535
 #define MAX_IP 255
@@ -32,18 +35,8 @@ int validateIp(char *ip) {
     
 }
 int compareIps(char* ip1, char* ip2) {
-    char* ip1Split = strtok(ip1, ".");
-    char* ip2Split = strtok(ip2, ".");
-    //Compare each number (don't have to worry about invalid strings since they've already been checked)
-    while (ip1Split != NULL && ip2Split != NULL) {
-        if (atoi(ip1Split) < atoi(ip2Split)) {
-            return -1;
-        } else {
-            ip1Split = strtok(NULL, ".");
-            ip2Split = strtok(NULL, ".");
-        }
-    }
-    return 1;
+    char
+    int inet_aton(const char *cp, struct in_addr *ip1);
 }
 int validatePort(char *port) {
     //Port Validation
