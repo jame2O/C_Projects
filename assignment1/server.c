@@ -11,9 +11,9 @@
 #define MAX_IP 255
 
 typedef struct Rule {
-    char ip[2][16];
-    int ports[2];
-    char queries[10];
+    char ip[2][16]; //2 spaces for IPs, 16 chars for each IP
+    int ports[2]; // 2 spaces for ports
+    char queries[10][30]; //10 spaces for queries, 30 chars for each query
 } Rule;
 
 int validateIp(char *ip) {
@@ -130,12 +130,40 @@ int addRule(char inp[], int pos, int cap, Rule* rules) {
     //Print response
     printf("Rule added\n");
     // Free mallocs & return
-    return 0;
+    return 1;
 }
-
+int queryRule(char inp[], Rule* rules, int ruleCount) {
+    for (int i=0; i<ruleCount; i++) {
+        //Check IP First
+        if (strcmp(rules[i].ip[1], '#')) { //Single IP case
+            if (!(compareIps(rules[i].ip[0], inp) == 1 && compareIps(inp, rules[i].ip[1]) == 1)) {
+                break;
+            }
+        } else { //Single IP case
+            if (!(strcmp(rules[i].ip[0], inp) == 0)) {
+                break;
+            }
+        }
+        //Now check ports
+        if (rules[i].ports[1] != -1) { //Multiple port case
+            if (!(atoi(inp) >= rules[i].ports[0] && atoi(inp) <= rules[i].ports[1])) {
+                break;
+            }
+        } else { //Single port case
+            if (!(atoi(inp) == rules[i].ports[0])) {
+                break;
+            }
+        }
+        //All checks passed, add to queries
+        strcpy(rules[i].queries[0], inp);
+        
+    }
+    return -1;
+}
 
 int main (int argc, char ** argv) {
     // Declare the requests list and allocate mem for 10
+    int ruleCount =0;
     char *reqs;
     int reqPos = 0, reqCap=10;
     reqs = (char*)malloc(reqCap*sizeof(char));
@@ -169,10 +197,10 @@ int main (int argc, char ** argv) {
                 printRequests(reqs, reqPos);
                 break;
             case 'A':
-                addRule(inp, rulePos, ruleCap, rules);
+                if (addRule(inp, rulePos, ruleCap, rules) == 1) ruleCount++;
                 break;
             case 'C':
-                //query(rules);
+                query(inp, rules);
                 break;
             default:
                 printf("Invalid request\n");
