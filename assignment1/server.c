@@ -13,7 +13,9 @@
 typedef struct Rule {
     char ip[2][16]; //2 spaces for IPs, 16 chars for each IP
     int ports[2]; // 2 spaces for ports
-    char queries[10][30]; //10 spaces for queries, 30 chars for each query
+    char** queries;
+    int queryCount;
+    int queryCap;
 } Rule;
 
 int validateIp(char *ip) {
@@ -126,40 +128,205 @@ int addRule(char inp[], int pos, int cap, Rule* rules) {
                 rules[pos].ports[1] = -1;
             }
         }
-
-    //Print response
+        rules[pos].queryCount = 0;
+        rules[pos].queryCap = 10; // Initial capacity for queries
+        rules[pos].queries = (char **)malloc(rules[pos].queryCap * sizeof(char *));
+        for (int i = 0; i < rules[pos].queryCap; i++)
+        {
+            rules[pos].queries[i] = (char *)malloc(30 * sizeof(char)); // Allocate space for each query
+        }
+    // Print response
     printf("Rule added\n");
-    // Free mallocs & return
     return 1;
 }
 int queryRule(char inp[], Rule* rules, int ruleCount) {
+
+    // Split IP & Port & check validation
+    char ip[50], port[50];
+    if (sscanf(inp, "%s %s", ip, port) != 2)
+    {
+        printf("Illegal IP address or port specified\n");
+        return -1;
+    }
+    // Check the IP 
+    if (validateIp(ip) == -1)
+    {
+        printf("Illegal IP address or port specified\n");
+        return -1;
+    }
+    // Check the port
+    if (validatePort(port) == -1)
+    {
+        printf("Illegal IP address or port specified\n");
+        return -1;
+    }
+    //Checks against rules
     for (int i=0; i<ruleCount; i++) {
         //Check IP First
-        if (strcmp(rules[i].ip[1], '#')) { //Single IP case
-            if (!(compareIps(rules[i].ip[0], inp) == 1 && compareIps(inp, rules[i].ip[1]) == 1)) {
-                break;
+        if ((rules[i].ip[1][0] == '#')) { //Single IP case
+            if (!(strcmp(rules[i].ip[0], inp) == 0))
+            {
+                printf("Single Ip comparison failed\n");
+                continue;
             }
-        } else { //Single IP case
-            if (!(strcmp(rules[i].ip[0], inp) == 0)) {
-                break;
+        } else { //Multiple IP case
+            if (!(compareIps(rules[i].ip[0], ip) == 1 && compareIps(inp, rules[i].ip[1]) == 1))
+            {
+                printf("mulitple Ip comparison failed\n");
+                continue;
             }
         }
         //Now check ports
         if (rules[i].ports[1] != -1) { //Multiple port case
-            if (!(atoi(inp) >= rules[i].ports[0] && atoi(inp) <= rules[i].ports[1])) {
-                break;
+            if (!(atoi(port) >= rules[i].ports[0] && atoi(port) <= rules[i].ports[1])) {
+                printf("multiple port comparison failed\n");
+                continue;
             }
         } else { //Single port case
-            if (!(atoi(inp) == rules[i].ports[0])) {
-                break;
+            if (!(atoi(port) == rules[i].ports[0])) {
+                printf("Single port comparison failed\n");
+                continue;
             }
         }
         //All checks passed, add to queries
-        strcpy(rules[i].queries[0], inp);
+        printf("Connection accepted\n");
+        if (rules[i].queryCount >= rules[i].queryCap)
+        {
+            rules[i].queryCap *= 2;
+            rules[i].queries = (char **)realloc(rules[i].queries, rules[i].queryCap * sizeof(char *));
+            for (int j = rules[i].queryCount; j < rules[i].queryCap; j++)
+            {
+                rules[i].queries[j] = (char *)malloc(30 * sizeof(char));
+            }
+        }
+        strcpy(rules[i].queries[rules[i].queryCount], inp);
+        rules[i].queryCount++;
+        return 1;
         
     }
+    printf("Connection rejected\n");
     return -1;
 }
+char* rejoinRule(Rule rule, char* result)
+{
+    char ipPart[50];
+    char portPart[20];
+
+    // Rejoin IP part
+    if (rule.ip[1][0] == '#')
+    { // Single IP case
+        snprintf(ipPart, sizeof(ipPart), "%s", rule.ip[0]);
+    }
+    else
+    { // Multiple IP case
+        snprintf(ipPart, sizeof(ipPart), "%s-%s", rule.ip[0], rule.ip[1]);
+    }
+
+    // Rejoin port part
+    if (rule.ports[1] == -1)
+    { // Single port case
+        snprintf(portPart, sizeof(portPart), "%d", rule.ports[0]);
+    }
+    else
+    { // Multiple port case
+        snprintf(portPart, sizeof(portPart), "%d-%d", rule.ports[0], rule.ports[1]);
+    }
+
+    // Combine IP and port parts into result
+    snprintf(result, 70, "%s %s", ipPart, portPart);
+    return result;
+}
+int deleteRule(char inp[], Rule* rules, int ruleCount) {
+    // Split IP & Port & check validation
+    char ips[50], ports[50];
+    if (sscanf(inp, "%s %s", ips, ports) != 2)
+    {
+        printf("Rule invalid\n");
+        return 0;
+    }
+    if (strchr(ips, '-'))
+    { // Multiple case
+        char ip1[20], ip2[20];
+        sscanf(ips, "%[^-]-%s", ip1, ip2);
+        if (validateIp(ip1) == -1 || validateIp(ip2) == -1)
+        {
+            printf("Rule invalid\n");
+            return 0;
+        }
+        else
+        {
+            if (compareIps(ip1, ip2) == -1)
+            {
+                printf("Rule invalid\n");
+                return 0;
+            }
+        }
+    }
+    else
+    { // Single case
+        if (validateIp(ips) == -1)
+        {
+            printf("Rule invalid\n");
+            return 0;
+        }
+    }
+    if (strchr(ports, '-'))
+    { // Multiple case
+        char port1[10], port2[20];
+        sscanf(ports, "%[^-]-%s", port1, port2);
+        if (validatePort(port1) == -1 || validatePort(port2) == -1 || port2 <= port1)
+        {
+            printf("Rule invalid\n");
+            return 0;
+        }
+    }
+    else
+    { // Single case
+        if (validatePort(ports) == -1)
+        {
+            printf("Rule invalid\n");
+            return 0;
+        }
+    }
+    //Find the matching rule and delete it
+    for (int i = 0; i < ruleCount; i++)
+    {
+        char ruleString[70];
+        rejoinRule(rules[i], ruleString);
+        if (strcmp(ruleString, inp) == 0)
+        {
+            for (int j = 0; j < rules[i].queryCap; j++)
+            {
+                free(rules[i].queries[j]);
+            }
+            free(rules[i].queries);
+            for (int j = i; j < ruleCount - 1; j++)
+            {
+                rules[j] = rules[j + 1];
+            }
+            printf("Rule deleted\n");
+            return 1;
+        }
+    }
+    printf("Rule invalid\n");
+    return -1;
+}
+int listRules(Rule* rules, int ruleCount) {
+    for (int i=0; i<ruleCount; i++) {
+        char* ruleString = (char*)malloc(70*sizeof(char));
+        rejoinRule(rules[i], ruleString);
+        printf("Rule: %s\n", ruleString);
+        for (int j=0; j<(rules[i].queryCount); j++) {
+            if (rules[i].queries[j][0] != '\0') {
+                printf("Query: %s\n", rules[i].queries[j]);
+            }
+        }
+        free(ruleString);
+    }
+    return 1;
+}
+
+// Main Loop for the server program
 
 int main (int argc, char ** argv) {
     // Declare the requests list and allocate mem for 10
@@ -174,7 +341,6 @@ int main (int argc, char ** argv) {
     
     // Run the program indefinetly
     while (1) {
-
         //Checks if we need to add more memory to the request list.
         if (reqPos >= reqCap) {
             reqCap *= 2;
@@ -197,18 +363,35 @@ int main (int argc, char ** argv) {
                 printRequests(reqs, reqPos);
                 break;
             case 'A':
-                if (addRule(inp, rulePos, ruleCap, rules) == 1) ruleCount++;
+                if (addRule(inp, rulePos, ruleCap, rules) == 1) {
+                    ruleCount++; 
+                    rulePos++;
+                }
+                printf("Rule count: %d\n", ruleCount);
                 break;
             case 'C':
-                query(inp, rules);
+                queryRule(inp, rules, ruleCount);
+                break;
+            case 'D':
+                deleteRule(inp, rules, ruleCount);
+                break;
+            case 'L':
+                listRules(rules, ruleCount);
                 break;
             default:
                 printf("Invalid request\n");
                 break;
         }
     }
-
     //Free memory when we are done
+    for (int i = 0; i < ruleCount; i++)
+    {
+        for (int j = 0; j < rules[i].queryCap; j++)
+        {
+            free(rules[i].queries[j]);
+        }
+        free(rules[i].queries);
+    }
     free(reqs);
     free(rules);
 }
