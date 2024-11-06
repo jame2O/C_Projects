@@ -1,15 +1,23 @@
 #include <stdio.h>
-#include <pthread.h>
-#include <stdlib.h>
-#include <string.h>
+#include <sys/types.h> 
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
 #include <ctype.h>
+#include <stdlib.h>
+#include <strings.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <string.h>
+#include <arpa/inet.h>
+
 
 #define MAX_PORT 65535
 #define MAX_IP 255
 #define BUFFERLENGTH 256
+
+pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
+
+
 
 typedef struct Rule {
     char ip[2][16]; //2 spaces for IPs, 16 chars for each IP
@@ -70,14 +78,14 @@ int validatePort(char *port) {
     return 1;
 }
 
-void printRequests(char* reqs, int pos) {
+void printRequests(int mode, char* reqs, int pos) {
     //Loop through the request array, printing each one
     for (int i=0; i<pos; i++) {
         printf("%c\n", reqs[i]);
     }
 }
 
-int addRule(char inp[], int pos, int cap, Rule* rules) {
+int addRule(int mode, char inp[], int pos, int cap, Rule* rules) {
     // Checks if we need to add more memory to the rules list.
     if (pos >= cap)
     {
@@ -146,26 +154,23 @@ int addRule(char inp[], int pos, int cap, Rule* rules) {
     printf("Rule added\n");
     return 1;
 }
-int queryRule(char inp[], Rule* rules, int ruleCount) {
+char* queryRule(int mode, char inp[], Rule* rules, int ruleCount) {
 
     // Split IP & Port & check validation
     char ip[50], port[50];
     if (sscanf(inp, "%s %s", ip, port) != 2)
     {
-        printf("Illegal IP address or port specified\n");
-        return -1;
+        return("Illegal IP address or port specified\n");
     }
     // Check the IP 
     if (validateIp(ip) == -1)
     {
-        printf("Illegal IP address or port specified\n");
-        return -1;
+        return("Illegal IP address or port specified\n");
     }
     // Check the port
     if (validatePort(port) == -1)
     {
-        printf("Illegal IP address or port specified\n");
-        return -1;
+        return("Illegal IP address or port specified\n");
     }
     //Checks against rules
     for (int i=0; i<ruleCount; i++) {
@@ -196,7 +201,7 @@ int queryRule(char inp[], Rule* rules, int ruleCount) {
             }
         }
         //All checks passed, add to queries
-        printf("Connection accepted\n");
+        return("Connection accepted\n");
         if (rules[i].queryCount >= rules[i].queryCap)
         {
             rules[i].queryCap *= 2;
@@ -208,11 +213,9 @@ int queryRule(char inp[], Rule* rules, int ruleCount) {
         }
         strcpy(rules[i].queries[rules[i].queryCount], inp);
         rules[i].queryCount++;
-        return 1;
         
     }
-    printf("Connection rejected\n");
-    return -1;
+    return("Connection rejected\n");
 }
 char* rejoinRule(Rule rule, char* result)
 {
@@ -243,7 +246,7 @@ char* rejoinRule(Rule rule, char* result)
     snprintf(result, 70, "%s %s", ipPart, portPart);
     return result;
 }
-int deleteRule(char inp[], Rule* rules, int ruleCount) {
+int deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
     // Split IP & Port & check validation
     char ips[50], ports[50];
     if (sscanf(inp, "%s %s", ips, ports) != 2)
@@ -318,7 +321,7 @@ int deleteRule(char inp[], Rule* rules, int ruleCount) {
     printf("Rule invalid\n");
     return -1;
 }
-int listRules(Rule* rules, int ruleCount) {
+int listRules(int mode, Rule* rules, int ruleCount) {
     for (int i=0; i<ruleCount; i++) {
         char* ruleString = (char*)malloc(70*sizeof(char));
         rejoinRule(rules[i], ruleString);
@@ -332,46 +335,8 @@ int listRules(Rule* rules, int ruleCount) {
     }
     return 1;
 }
-
-// Main Loop for the server program
-
-int main (int argc, char ** argv) {
-    int mode = 0;
-    socklen_t clilen;
-    int sockfd, newsockfd, portno;
-    char buffer[BUFFERLENGTH];
-    struct sockaddr_in6 serv_addr, cli_addr;
-    int n;
-    if (argc >= 2) {
-        if (strcmp(argv[1], "-i") == 0) {
-            mode = 0;
-        } else {
-            if (atoi(argv[1]) > 0 && atoi(argv[1]) <= MAX_PORT ) {
-                mode = 1;
-                /* create socket */
-                sockfd = socket (AF_INET6, SOCK_STREAM, 0);
-                if (sockfd < 0) {
-                    error("ERROR opening socket");
-                }
-                bzero ((char *) &serv_addr, sizeof(serv_addr));
-                portno = atoi(argv[1]);
-                serv_addr.sin6_family = AF_INET6;
-                serv_addr.sin6_addr = in6addr_any;
-                serv_addr.sin6_port = htons (portno);
-                /* bind it */
-                if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
-                    error("ERROR on binding");
-                }
-                /* ready to accept connections */
-                listen(sockfd,5);
-                clilen = sizeof (cli_addr);
-            } else {
-                printf("Invalid argument\n");
-                return 0;
-            }
-        }
-    }
-    
+void interactiveMode() {
+    // Interactive mode
     // Declare the requests list and allocate mem for 10
     int ruleCount =0;
     char *reqs;
@@ -381,9 +346,8 @@ int main (int argc, char ** argv) {
     Rule *rules;
     int rulePos = 0; int ruleCap=10;
     rules = (Rule*)malloc(ruleCap*sizeof(Rule));
-    
-    // Run the program indefinetly
     while (1) {
+        
         //Checks if we need to add more memory to the request list.
         if (reqPos >= reqCap) {
             reqCap *= 2;
@@ -391,27 +355,10 @@ int main (int argc, char ** argv) {
         }
         char nextReq;
         char inp[50]; 
-        if (mode == 1) {
-            /* waiting for connections */
-            newsockfd = accept( sockfd, (struct sockaddr *) &cli_addr, &clilen);
-            if (newsockfd < 0) {
-                error ("ERROR on accept");
-            }
-            bzero (buffer, BUFFERLENGTH);
-            /* read the data */
-            n = read (newsockfd, buffer, BUFFERLENGTH - 1);
-            if (n < 0) {
-                error ("ERROR reading from socket");
-            }
-            printf ("Here is the message: %s\n", buffer);
-            
-        } else {
-            // Interactive mode
-            scanf("%c", &nextReq);
-            scanf(" %[^\n]", inp);
-            int ch;
-            while ((ch = getchar()) != '\n' && ch != EOF); 
-        }
+        scanf("%c", &nextReq);
+        scanf(" %[^\n]", inp);
+        int ch;
+        while ((ch = getchar()) != '\n' && ch != EOF); 
         //Accept next Request, add to list
         reqs[reqPos] = nextReq;
         reqPos++;
@@ -419,23 +366,23 @@ int main (int argc, char ** argv) {
         //Process the request:
         switch (nextReq) {
             case 'R':
-                printRequests(reqs, reqPos);
+                printRequests(1, reqs, reqPos);
                 break;
             case 'A':
-                if (addRule(inp, rulePos, ruleCap, rules) == 1) {
+                if (addRule(1, inp, rulePos, ruleCap, rules) == 1) {
                     ruleCount++; 
                     rulePos++;
                 }
                 printf("Rule count: %d\n", ruleCount);
                 break;
             case 'C':
-                queryRule(inp, rules, ruleCount);
+                queryRule(1, inp, rules, ruleCount);
                 break;
             case 'D':
-                deleteRule(inp, rules, ruleCount);
+                deleteRule(1, inp, rules, ruleCount);
                 break;
             case 'L':
-                listRules(rules, ruleCount);
+                listRules(1, rules, ruleCount);
                 break;
             default:
                 printf("Invalid request\n");
@@ -453,6 +400,156 @@ int main (int argc, char ** argv) {
     }
     free(reqs);
     free(rules);
+    exit(1);
+}
+int writeResult (int sockfd, char *buffer, size_t bufsize) {
+    int n;
+   
+    n = write(sockfd, &bufsize, sizeof(size_t));
+    if (n < 0) {
+		fprintf (stderr, "ERROR writing to result\n");
+		return -1;
+    }
+    
+    n = write(sockfd, buffer, bufsize);
+    if (n != bufsize) {
+		fprintf (stderr, "Couldn't write %ld bytes, wrote %d bytes\n", bufsize, n);
+		return -1;
+    }
+    return 0;
+}
+char *readRes(int sockfd) {
+    size_t bufsize;
+    int res;
+    char *buffer;
+
+    res = read(sockfd, &bufsize, sizeof(size_t));
+    if (res != sizeof(size_t)) {
+		fprintf (stderr, "Reading number of bytes from socket failed\n");
+		return NULL;
+    }
+
+    buffer = malloc(bufsize+1);
+    if (buffer) {
+		buffer[bufsize]  = '\0';
+		res = read(sockfd, buffer, bufsize);
+		if (res != bufsize) {
+			fprintf (stderr, "Reading reply from socket\n");
+			free(buffer);
+			return NULL;
+		}
+    }
+    
+    return buffer;
+}  
+
+void *processRequest (void *args) {
+    int *newsockfd =  (int *) args;   
+    int n;
+    int tmp;
+    char *buffer;
+
+    buffer = readRes (*newsockfd);
+    if (!buffer)  {
+        fprintf (stderr, "ERROR reading from socket\n");
+    }
+    else {
+        //Process the request
+        printf ("Here is the message: %s\n",buffer);
+        pthread_mutex_lock (&mut); /* Check if the rules list has enough memory. If not, add more: */
+
+    }
+    pthread_mutex_unlock (&mut); /* unlock exclusive access to variable isExecuted */
+    writeResult (*newsockfd, buffer, strlen(buffer));
+    close (*newsockfd);
+    free (newsockfd);
+    free (buffer);
+    pthread_exit (NULL);
+}
+// Main Loop for the server program
+int main (int argc, char ** argv) {
+    //Check for interactive mode first as to not waste memory
+    int result;
+    socklen_t clilen;
+    int sockfd, newsockfd, portno;
+    char buffer[BUFFERLENGTH];
+    struct sockaddr_in6 serv_addr, cli_addr;
+    int n;
+    if (argc >= 2) {
+        if (strcmp(argv[1], "-i") == 0) {
+            interactiveMode();
+        } else {
+            if (atoi(argv[1]) > 0 && atoi(argv[1]) <= MAX_PORT ) {
+                /* create socket */
+                sockfd = socket (AF_INET6, SOCK_STREAM, 0);
+                if (sockfd < 0) {
+                    error("ERROR opening socket");
+                }
+                bzero ((char *) &serv_addr, sizeof(serv_addr));
+                portno = atoi(argv[1]);
+                serv_addr.sin6_family = AF_INET6;
+                serv_addr.sin6_addr = in6addr_any;
+                serv_addr.sin6_port = htons (portno);
+                /* bind it */
+                if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+                    error("ERROR on binding");
+                }
+                /* ready to accept connections */
+                listen(sockfd,5);
+                // Declare the requests list and allocate mem for 10
+                int ruleCount =0;
+                char *reqs;
+                int reqPos = 0, reqCap=10;
+                reqs = (char*)malloc(reqCap*sizeof(char));
+                // Declare the rules list and allocate memory
+                Rule *rules;
+                int rulePos = 0; int ruleCap=10;
+                rules = (Rule*)malloc(ruleCap*sizeof(Rule));
+                
+            } else {
+                printf("Invalid argument\n");
+                return 0;
+            }
+        }
+    } else {
+        printf("Invalid argument\n");
+        return 0;
+    }
+    
+    
+    // Run the program indefinetly
+    while (1) {
+        // Thread stuff
+        pthread_t server_thread;
+        pthread_attr_t pthread_attr;
+        int *newsockfd;
+        struct sockaddr_in6 cli_addr;
+        clilen = sizeof (cli_addr);
+        newsockfd = malloc(sizeof (int));
+        if (!newsockfd) { //NEW SOCK ALERRTT
+            fprintf (stderr, "Memory allocation failed!\n");
+            exit(1);
+        }
+
+        // Create new thread for connection processing
+        if (pthread_attr_init (&pthread_attr)) {
+            fprintf(stderr, "ERROR on thread initial attrs creation");
+            exit(1);
+        }
+        if (pthread_attr_setdetachstate (&pthread_attr, PTHREAD_CREATE_DETACHED)) {
+            fprintf(stderr, "ERROR on thread attrs setting");
+            exit(1);
+        }
+
+        result = pthread_create (&server_thread, &pthread_attr, processRequest, (void *) newsockfd);
+        if (result != 0) {
+            fprintf(stderr, "ERROR on thread creation");
+            perror("pthread_create");
+            exit(1);
+        }
+    }
+    
     close(newsockfd);
+    return 0;
 }
 
