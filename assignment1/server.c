@@ -9,6 +9,7 @@
 
 #define MAX_PORT 65535
 #define MAX_IP 255
+#define BUFFERLENGTH 256
 
 typedef struct Rule {
     char ip[2][16]; //2 spaces for IPs, 16 chars for each IP
@@ -17,6 +18,12 @@ typedef struct Rule {
     int queryCount;
     int queryCap;
 } Rule;
+
+void error(char *msg)
+{
+    perror(msg);
+    exit(1);
+}
 
 int validateIp(char *ip) {
 
@@ -329,6 +336,42 @@ int listRules(Rule* rules, int ruleCount) {
 // Main Loop for the server program
 
 int main (int argc, char ** argv) {
+    int mode = 0;
+    socklen_t clilen;
+    int sockfd, newsockfd, portno;
+    char buffer[BUFFERLENGTH];
+    struct sockaddr_in6 serv_addr, cli_addr;
+    int n;
+    if (argc >= 2) {
+        if (strcmp(argv[1], "-i") == 0) {
+            mode = 0;
+        } else {
+            if (atoi(argv[1]) > 0 && atoi(argv[1]) <= MAX_PORT ) {
+                mode = 1;
+                /* create socket */
+                sockfd = socket (AF_INET6, SOCK_STREAM, 0);
+                if (sockfd < 0) {
+                    error("ERROR opening socket");
+                }
+                bzero ((char *) &serv_addr, sizeof(serv_addr));
+                portno = atoi(argv[1]);
+                serv_addr.sin6_family = AF_INET6;
+                serv_addr.sin6_addr = in6addr_any;
+                serv_addr.sin6_port = htons (portno);
+                /* bind it */
+                if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+                    error("ERROR on binding");
+                }
+                /* ready to accept connections */
+                listen(sockfd,5);
+                clilen = sizeof (cli_addr);
+            } else {
+                printf("Invalid argument\n");
+                return 0;
+            }
+        }
+    }
+    
     // Declare the requests list and allocate mem for 10
     int ruleCount =0;
     char *reqs;
@@ -346,14 +389,30 @@ int main (int argc, char ** argv) {
             reqCap *= 2;
             reqs = (char*)realloc(reqs, reqCap*sizeof(char));
         }
-
-        //Accept next Request, add to list
         char nextReq;
         char inp[50]; 
-        scanf("%c", &nextReq);
-        scanf(" %[^\n]", inp);
-        int ch;
-        while ((ch = getchar()) != '\n' && ch != EOF); 
+        if (mode == 1) {
+            /* waiting for connections */
+            newsockfd = accept( sockfd, (struct sockaddr *) &cli_addr, &clilen);
+            if (newsockfd < 0) {
+                error ("ERROR on accept");
+            }
+            bzero (buffer, BUFFERLENGTH);
+            /* read the data */
+            n = read (newsockfd, buffer, BUFFERLENGTH - 1);
+            if (n < 0) {
+                error ("ERROR reading from socket");
+            }
+            printf ("Here is the message: %s\n", buffer);
+            
+        } else {
+            // Interactive mode
+            scanf("%c", &nextReq);
+            scanf(" %[^\n]", inp);
+            int ch;
+            while ((ch = getchar()) != '\n' && ch != EOF); 
+        }
+        //Accept next Request, add to list
         reqs[reqPos] = nextReq;
         reqPos++;
 
@@ -394,5 +453,6 @@ int main (int argc, char ** argv) {
     }
     free(reqs);
     free(rules);
+    close(newsockfd);
 }
 
