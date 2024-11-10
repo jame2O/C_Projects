@@ -16,7 +16,7 @@
 #define BUFFERLENGTH 256
 
 pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
-
+int isExecuted = 0;
 
 
 typedef struct Rule {
@@ -78,14 +78,30 @@ int validatePort(char *port) {
     return 1;
 }
 
-void printRequests(int mode, char* reqs, int pos) {
+char* printRequests(int mode, char* reqs, int pos) {
+    // Allocate initial memory for the result string
+    size_t resultSize = pos * 3 + 1; // Each request will add 2 characters (comma and request) + null terminator
+    char* result = (char*)malloc(resultSize);
+    if (!result) {
+        fprintf(stderr, "Memory allocation failed!\n");
+        exit(1);
+    }
+    result[0] = '\0'; // Initialize the result string
     //Loop through the request array, printing each one
     for (int i=0; i<pos; i++) {
-        printf("%c\n", reqs[i]);
+        char next[2];
+        next[0] = reqs[i];
+        next[1] = '\0';
+        if (i > 0) {
+            strcat(result, ",");
+        }
+        strcat(result, next);
     }
+    return result;
 }
 
-int addRule(int mode, char inp[], int pos, int cap, Rule* rules) {
+char* addRule(int mode, char inp[], int pos, int cap, Rule* rules) {
+    char* result = malloc(50*sizeof(char));
     // Checks if we need to add more memory to the rules list.
     if (pos >= cap)
     {
@@ -95,20 +111,20 @@ int addRule(int mode, char inp[], int pos, int cap, Rule* rules) {
     //Split IP & Port & check validation
     char ips[50], ports[50];
     if (sscanf(inp, "%s %s", ips, ports) != 2) {
-        printf("Invalid rule\n");
-        return 0;
+        strcpy(result, "Invalid rule\n");
+        return result;
     }
     //Check the IP and split if nescessary, then verify, and add to the rules list
     if (strchr(ips, '-')) { //Multiple case
         char ip1[20], ip2[20];
         sscanf(ips, "%[^-]-%s", ip1, ip2);
         if (validateIp(ip1) == -1 || validateIp(ip2) == -1) {
-            printf("Invalid rule\n");
-            return 0;
+            strcpy(result, "Invalid rule\n");
+            return result;
         } else {
             if (compareIps(ip1, ip2) == -1) {
-                printf("Invalid rule\n");
-                return 0;
+                strcpy(result, "Invalid rule\n");
+                return result;
             } else { //Add to rules list
                 strcpy(rules[pos].ip[0], ip1);
                 strcpy(rules[pos].ip[1], ip2);
@@ -116,8 +132,8 @@ int addRule(int mode, char inp[], int pos, int cap, Rule* rules) {
         }
     } else { //Single case
         if (validateIp(ips) == -1) {
-            printf("Invalid rule\n");
-            return 0;
+            strcpy(result, "Invalid rule\n");
+            return result;
         } else {
             strcpy(rules[pos].ip[0], ips);
             strcpy(rules[pos].ip[1], "#");
@@ -128,16 +144,16 @@ int addRule(int mode, char inp[], int pos, int cap, Rule* rules) {
             char port1[10], port2[20];
             sscanf(ports, "%[^-]-%s", port1, port2);
             if (validatePort(port1) == -1 || validatePort(port2) == -1 || port2 <= port1) {
-                printf("Invalid rule\n");
-                return 0;
+                strcpy(result, "Invalid rule\n");
+                return result;
             } else {
                 rules[pos].ports[0] = atoi(port1);
                 rules[pos].ports[1] = atoi(port2);
             }
         } else { //Single case
             if (validatePort(ports) == -1) {
-                printf("Invalid rule\n");
-                return 0;
+                strcpy(result, "Invalid rule\n");
+                return result;
             } else {
                 rules[pos].ports[0] = atoi(ports);
                 rules[pos].ports[1] = -1;
@@ -151,26 +167,29 @@ int addRule(int mode, char inp[], int pos, int cap, Rule* rules) {
             rules[pos].queries[i] = (char *)malloc(30 * sizeof(char)); // Allocate space for each query
         }
     // Print response
-    printf("Rule added\n");
-    return 1;
+    strcpy(result,"Rule added\n");
+    return result;
 }
 char* queryRule(int mode, char inp[], Rule* rules, int ruleCount) {
-
+    char* result = malloc(100*sizeof(char));
     // Split IP & Port & check validation
     char ip[50], port[50];
     if (sscanf(inp, "%s %s", ip, port) != 2)
     {
-        return("Illegal IP address or port specified\n");
+        strcpy(result, "Illegal IP address or port specified\n");
+        return result;
     }
     // Check the IP 
     if (validateIp(ip) == -1)
     {
-        return("Illegal IP address or port specified\n");
+        strcpy(result, "Illegal IP address or port specified\n");
+        return result;
     }
     // Check the port
     if (validatePort(port) == -1)
     {
-        return("Illegal IP address or port specified\n");
+        strcpy(result, "Illegal IP address or port specified\n");
+        return result;
     }
     //Checks against rules
     for (int i=0; i<ruleCount; i++) {
@@ -178,7 +197,7 @@ char* queryRule(int mode, char inp[], Rule* rules, int ruleCount) {
         if ((rules[i].ip[1][0] == '#')) { //Single IP case
             if (!(strcmp(rules[i].ip[0], inp) == 0))
             {
-                printf("Single Ip comparison failed\n");
+                printf("single Ip comparison failed\n");
                 continue;
             }
         } else { //Multiple IP case
@@ -201,7 +220,6 @@ char* queryRule(int mode, char inp[], Rule* rules, int ruleCount) {
             }
         }
         //All checks passed, add to queries
-        return("Connection accepted\n");
         if (rules[i].queryCount >= rules[i].queryCap)
         {
             rules[i].queryCap *= 2;
@@ -213,9 +231,11 @@ char* queryRule(int mode, char inp[], Rule* rules, int ruleCount) {
         }
         strcpy(rules[i].queries[rules[i].queryCount], inp);
         rules[i].queryCount++;
-        
+        strcpy(result, "Connection accepted\n");
+        return result;
     }
-    return("Connection rejected\n");
+    strcpy(result, "Connection rejected\n");
+    return result;
 }
 char* rejoinRule(Rule rule, char* result)
 {
@@ -246,13 +266,14 @@ char* rejoinRule(Rule rule, char* result)
     snprintf(result, 70, "%s %s", ipPart, portPart);
     return result;
 }
-int deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
+char* deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
+    char* result = malloc(50*sizeof(char));
     // Split IP & Port & check validation
     char ips[50], ports[50];
     if (sscanf(inp, "%s %s", ips, ports) != 2)
     {
-        printf("Rule invalid\n");
-        return 0;
+        strcpy(result, "Rule invalid\n");
+        return result;
     }
     if (strchr(ips, '-'))
     { // Multiple case
@@ -260,15 +281,15 @@ int deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
         sscanf(ips, "%[^-]-%s", ip1, ip2);
         if (validateIp(ip1) == -1 || validateIp(ip2) == -1)
         {
-            printf("Rule invalid\n");
-            return 0;
+            strcpy(result, "Rule invalid\n");
+            return result;
         }
         else
         {
             if (compareIps(ip1, ip2) == -1)
             {
-                printf("Rule invalid\n");
-                return 0;
+                strcpy(result, "Rule invalid\n");
+                return result;
             }
         }
     }
@@ -276,8 +297,8 @@ int deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
     { // Single case
         if (validateIp(ips) == -1)
         {
-            printf("Rule invalid\n");
-            return 0;
+            strcpy(result, "Rule invalid\n");
+            return result;
         }
     }
     if (strchr(ports, '-'))
@@ -286,16 +307,16 @@ int deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
         sscanf(ports, "%[^-]-%s", port1, port2);
         if (validatePort(port1) == -1 || validatePort(port2) == -1 || port2 <= port1)
         {
-            printf("Rule invalid\n");
-            return 0;
+            strcpy(result, "Rule invalid\n");
+            return result;
         }
     }
     else
     { // Single case
         if (validatePort(ports) == -1)
         {
-            printf("Rule invalid\n");
-            return 0;
+            strcpy(result, "Rule invalid\n");
+            return result;
         }
     }
     //Find the matching rule and delete it
@@ -314,26 +335,62 @@ int deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
             {
                 rules[j] = rules[j + 1];
             }
-            printf("Rule deleted\n");
-            return 1;
+            strcpy(result, "Rule deleted\n");
+            return result;
         }
     }
-    printf("Rule invalid\n");
-    return -1;
+    strcpy(result, "Rule invalid\n");
+    return result;
 }
-int listRules(int mode, Rule* rules, int ruleCount) {
-    for (int i=0; i<ruleCount; i++) {
-        char* ruleString = (char*)malloc(70*sizeof(char));
+char* listRules(int mode, Rule* rules, int ruleCount) {
+    size_t resultSize = 1024; // Initial size for the result string
+    char* result = (char*)malloc(resultSize);
+    if (!result) {
+        fprintf(stderr, "Memory allocation failed!\n");
+        exit(1);
+    }
+    result[0] = '\0'; // Initialize the result string
+
+    for (int i = 0; i < ruleCount; i++) {
+        char ruleString[70];
         rejoinRule(rules[i], ruleString);
-        printf("Rule: %s\n", ruleString);
-        for (int j=0; j<(rules[i].queryCount); j++) {
-            if (rules[i].queries[j][0] != '\0') {
-                printf("Query: %s\n", rules[i].queries[j]);
+
+        // Calculate the required size and reallocate if necessary
+        size_t requiredSize = strlen(result) + strlen("Rule: ") + strlen(ruleString) + 2;
+        if (requiredSize > resultSize) {
+            resultSize = requiredSize + 1024;
+            result = (char*)realloc(result, resultSize);
+            if (!result) {
+                fprintf(stderr, "Memory reallocation failed!\n");
+                exit(1);
             }
         }
-        free(ruleString);
+
+        strcat(result, "Rule: ");
+        strcat(result, ruleString);
+        strcat(result, "\n");
+
+        for (int j = 0; j < (rules[i].queryCount); j++) {
+            if (rules[i].queries[j][0] != '\0') {
+                // Calculate the required size and reallocate if necessary
+                requiredSize = strlen(result) + strlen("Query: ") + strlen(rules[i].queries[j]) + 2;
+                if (requiredSize > resultSize) {
+                    resultSize = requiredSize + 1024;
+                    result = (char*)realloc(result, resultSize);
+                    if (!result) {
+                        fprintf(stderr, "Memory reallocation failed!\n");
+                        exit(1);
+                    }
+                }
+
+                strcat(result, "Query: ");
+                strcat(result, rules[i].queries[j]);
+                strcat(result, "\n");
+            }
+        }
     }
-    return 1;
+
+    return result;
 }
 void interactiveMode() {
     // Interactive mode
@@ -355,8 +412,11 @@ void interactiveMode() {
         }
         char nextReq;
         char inp[50]; 
-        scanf("%c", &nextReq);
-        scanf(" %[^\n]", inp);
+        scanf(" %c", &nextReq);
+        if (nextReq != 'R' && nextReq != 'L') {
+            scanf(" %[^\n]", inp);
+        }
+
         int ch;
         while ((ch = getchar()) != '\n' && ch != EOF); 
         //Accept next Request, add to list
@@ -366,23 +426,41 @@ void interactiveMode() {
         //Process the request:
         switch (nextReq) {
             case 'R':
-                printRequests(1, reqs, reqPos);
+                char* resultR = printRequests(1, reqs, reqPos);
+                printf("%s\n", resultR);
+                free(resultR);
                 break;
             case 'A':
-                if (addRule(1, inp, rulePos, ruleCap, rules) == 1) {
+                char* resultA = addRule(1, inp, rulePos, ruleCap, rules);
+                if (strcmp(resultA, "Rule added\n") == 0) {
                     ruleCount++; 
                     rulePos++;
+                    printf("%s", resultA);
+                    free(resultA);
+                } else {
+                    printf("%s", resultA);
+                    free(resultA);
                 }
                 printf("Rule count: %d\n", ruleCount);
                 break;
             case 'C':
-                queryRule(1, inp, rules, ruleCount);
+                char* resultC = queryRule(1, inp, rules, ruleCount);
+                printf("%s", resultC);
+                free(resultC);
                 break;
             case 'D':
-                deleteRule(1, inp, rules, ruleCount);
+                char* resultD = deleteRule(1, inp, rules, ruleCount);
+                if (strcmp(resultD, "Rule deleted\n") == 0) {
+                    ruleCount--;
+                    rulePos--;
+                }
+                printf("%s", resultD);
+                free(resultD);
                 break;
             case 'L':
-                listRules(1, rules, ruleCount);
+                char* resultL = listRules(1, rules, ruleCount);
+                printf("%s", resultL);
+                free(resultL);
                 break;
             default:
                 printf("Invalid request\n");
@@ -448,23 +526,67 @@ void *processRequest (void *args) {
     int n;
     int tmp;
     char *buffer;
-
     buffer = readRes (*newsockfd);
     if (!buffer)  {
-        fprintf (stderr, "ERROR reading from socket\n");
+		fprintf (stderr, "ERROR reading from socket\n");
     }
     else {
-        //Process the request
+        printf ("Here is the request: %s\n",buffer);
+        //Process the request:
+        /*
+        switch (*buffer) {
+            case 'R':
+                printRequests(0, reqs, reqPos);
+                break;
+            case 'A':
+                if (addRule(0, inp, rulePos, ruleCap, rules) == 1) {
+                    ruleCount++; 
+                    rulePos++;
+                }
+                printf("Rule count: %d\n", ruleCount);
+                break;
+            case 'C':
+                queryRule(1, inp, rules, ruleCount);
+                break;
+            case 'D':
+                deleteRule(1, inp, rules, ruleCount);
+                break;
+            case 'L':
+                listRules(1, rules, ruleCount);
+                break;
+            default:
+                printf("Invalid request\n");
+                break;
+        }
+        */
+        /*
         printf ("Here is the message: %s\n",buffer);
-        pthread_mutex_lock (&mut); /* Check if the rules list has enough memory. If not, add more: */
+		pthread_mutex_lock (&mut); // lock exclusive access to variable isExecuted 
+		tmp = isExecuted;
+			
+		printf ("Waiting for confirmation: Please input an integer\n");
+		scanf ("%d", &n); // not to be done in real programs: don't go to sleep while holding a lock! Done here to demonstrate the mutual exclusion problem. 
+		printf ("Read value %d\n", n);
 
+		isExecuted = tmp +1;
+		pthread_mutex_unlock (&mut); // release the lock 
+		
+		buffer = realloc(buffer, BUFFERLENGTH);
+		n = sprintf (buffer, "I got you message, the value of isExecuted is %d\n", isExecuted);
+		// send the reply back 
+		n = writeResult (*newsockfd, buffer, strlen(buffer) + 1);
+		if (n < 0) {
+			fprintf (stderr, "Error writing to socket\n");
+		}
+        */
+		
     }
-    pthread_mutex_unlock (&mut); /* unlock exclusive access to variable isExecuted */
-    writeResult (*newsockfd, buffer, strlen(buffer));
-    close (*newsockfd);
+
+    free(buffer);
+    close(*newsockfd); /* important to avoid memory leak */
     free (newsockfd);
-    free (buffer);
-    pthread_exit (NULL);
+	  
+    pthread_exit (NULL); /*exit value not used */
 }
 // Main Loop for the server program
 int main (int argc, char ** argv) {
@@ -530,7 +652,12 @@ int main (int argc, char ** argv) {
             fprintf (stderr, "Memory allocation failed!\n");
             exit(1);
         }
-
+        /* waiting for connections */
+		*newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
+		if (*newsockfd < 0) {
+			error ("ERROR on accept");
+		}
+        
         // Create new thread for connection processing
         if (pthread_attr_init (&pthread_attr)) {
             fprintf(stderr, "ERROR on thread initial attrs creation");
@@ -542,11 +669,11 @@ int main (int argc, char ** argv) {
         }
 
         result = pthread_create (&server_thread, &pthread_attr, processRequest, (void *) newsockfd);
+        printf("checkmark\n");
         if (result != 0) {
-            fprintf(stderr, "ERROR on thread creation");
-            perror("pthread_create");
-            exit(1);
-        }
+			fprintf (stderr, "Thread creation failed!\n");
+			exit (1);
+		}
     }
     
     close(newsockfd);

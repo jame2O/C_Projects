@@ -114,7 +114,7 @@ int main(int argc, char *argv[])
     freeaddrinfo(result);           /* No longer needed */
 
     /* prepare message */
-    printf ("Please enter the message: ");
+    printf ("Please enter a request: ");
     buffer = malloc(BUFFERLENGTH);
     bzero (buffer, BUFFERLENGTH);
     fgets (buffer, BUFFERLENGTH, stdin);
