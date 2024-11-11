@@ -16,8 +16,6 @@
 #define BUFFERLENGTH 256
 
 pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
-int isExecuted = 0;
-
 
 typedef struct Rule {
     char ip[2][16]; //2 spaces for IPs, 16 chars for each IP
@@ -392,17 +390,10 @@ char* listRules(int mode, Rule* rules, int ruleCount) {
 
     return result;
 }
-void interactiveMode() {
+void interactiveMode(int ruleCount, char* reqs, int reqPos, int reqCap, Rule* rules, int rulePos, int ruleCap) {
     // Interactive mode
     // Declare the requests list and allocate mem for 10
-    int ruleCount =0;
-    char *reqs;
-    int reqPos = 0, reqCap=10;
-    reqs = (char*)malloc(reqCap*sizeof(char));
-    // Declare the rules list and allocate memory
-    Rule *rules;
-    int rulePos = 0; int ruleCap=10;
-    rules = (Rule*)malloc(ruleCap*sizeof(Rule));
+    
     while (1) {
         
         //Checks if we need to add more memory to the request list.
@@ -590,6 +581,18 @@ void *processRequest (void *args) {
 }
 // Main Loop for the server program
 int main (int argc, char ** argv) {
+
+
+    int ruleCount =0;
+    char *reqs;
+    int reqPos = 0, reqCap=10;
+    reqs = (char*)malloc(reqCap*sizeof(char));
+    // Declare the rules list and allocate memory
+    Rule *rules;
+    int rulePos = 0; int ruleCap=10;
+    rules = (Rule*)malloc(ruleCap*sizeof(Rule));
+
+
     //Check for interactive mode first as to not waste memory
     int result;
     socklen_t clilen;
@@ -599,7 +602,7 @@ int main (int argc, char ** argv) {
     int n;
     if (argc >= 2) {
         if (strcmp(argv[1], "-i") == 0) {
-            interactiveMode();
+            interactiveMode(ruleCount, reqs, reqPos, reqCap, rules, rulePos, ruleCap);
         } else {
             if (atoi(argv[1]) > 0 && atoi(argv[1]) <= MAX_PORT ) {
                 /* create socket */
