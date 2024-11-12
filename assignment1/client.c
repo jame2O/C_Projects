@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
     char *buffer;
     
     if (argc < 3) {
-       fprintf (stderr, "usage %s hostname port\n", argv[0]);
+       fprintf (stderr, "Usage: %s <Hostname> <Port> <Command>\n", argv[0]);
        exit(1);
     }
 
@@ -114,10 +114,39 @@ int main(int argc, char *argv[])
     freeaddrinfo(result);           /* No longer needed */
 
     /* prepare message */
-    printf ("Please enter a request: ");
+    
     buffer = malloc(BUFFERLENGTH);
     bzero (buffer, BUFFERLENGTH);
-    fgets (buffer, BUFFERLENGTH, stdin);
+    if (argc == 6) {
+        size_t len1 = strlen(argv[3]);
+        size_t len2 = strlen(argv[4]);
+        size_t len3 = strlen(argv[5]);
+        char *commandArg = (char *)malloc(len1 + len2 + len3 + 3);
+        strcpy(commandArg, argv[3]);
+        strcat(commandArg, " ");
+        strcat(commandArg, argv[4]);
+        strcat(commandArg, " ");
+        strcat(commandArg, argv[5]);
+        strncpy(buffer, commandArg, BUFFERLENGTH);
+        buffer[BUFFERLENGTH - 1] = '\0'; // Null-terminate the buffer
+        free(commandArg);
+    } else if (argc == 5) {
+        size_t len1 = strlen(argv[3]);
+        size_t len2 = strlen(argv[4]);
+        char *commandArg = (char *)malloc(len1 + len2 + 2);
+        strcpy(commandArg, argv[3]);
+        strcat(commandArg, " ");
+        strcat(commandArg, argv[4]);
+        strncpy(buffer, commandArg, BUFFERLENGTH);
+        buffer[BUFFERLENGTH - 1] = '\0'; // Null-terminate the buffer
+        free(commandArg);
+    } else if (argc == 4) {
+        strncpy(buffer, argv[3], BUFFERLENGTH);
+        buffer[BUFFERLENGTH - 1] = '\0';
+    } else {
+        fprintf(stderr, "Usage: %s <Hostname> <Port> <Command>\n", argv[0]);
+        exit(1);
+    }
 
     /* send message */
     n = writeResult (sockfd, buffer, strlen(buffer));
@@ -127,9 +156,8 @@ int main(int argc, char *argv[])
 
     /* wait for reply */
     free(buffer);
-    
     buffer = readRes (sockfd);
-    printf ("%s\n",buffer);
+    printf ("%s\n", buffer);
     close(sockfd);
     
     return 0;

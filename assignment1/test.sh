@@ -8,7 +8,7 @@ serverOut=testServerOutput.txt
 clientOut=testClientOutput.txt
 successFile=testSuccess.txt
 IPADDRESS=localhost
-PORT=2200
+PORT=2000
 
 # --- helper function ---
 function run(){
@@ -26,27 +26,27 @@ function run(){
 function checkConnection() {
     sleep 0.1
     case `netstat -a -n -p 2>/dev/null| grep $PORT `  in
-	*":2200"*"LISTEN"*"server"*)
+	*":2000"*"LISTEN"*"server"*)
 	    return 1;;
     esac
     sleep 0.2
     case `netstat -a -n -p 2>/dev/null| grep $PORT`  in
-	*":2200"*"LISTEN"*"server"*)
+	*":2000"*"LISTEN"*"server"*)
 	    return 1;;
     esac
     sleep 0.2
     case `netstat -a -n -p 2>/dev/null| grep $PORT`  in
-	*":2200"*"LISTEN"*"server"*)
+	*":2000"*"LISTEN"*"server"*)
 	    return 1;;
     esac
     sleep 0.2
     case `netstat -a -n -p 2>/dev/null| grep $PORT`  in
-	*":2200"*"LISTEN"*"server"*)
+	*":2000"*"LISTEN"*"server"*)
 	    return 1;;
     esac
     sleep 0.2
     case `netstat -a -n -p 2>/dev/null| grep $PORT`  in
-	*":2200"*"LISTEN"*"server"*)
+	*":2000"*"LISTEN"*"server"*)
 	    return 1;;
     esac
     return 0
@@ -76,6 +76,7 @@ function interactive_testcase() {
     else
 	echo "OK"
     fi
+    sleep 0.5
     killall $server > /dev/null 2> /dev/null
     echo -en "server result:     \t"
     res=`diff $serverOut $successFile 2>&1`

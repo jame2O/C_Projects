@@ -14,7 +14,7 @@
 #define MAX_PORT 65535
 #define MAX_IP 255
 #define BUFFERLENGTH 256
-
+#define MAX_RULE_CAP 10
 pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct Rule {
@@ -24,7 +24,13 @@ typedef struct Rule {
     int queryCount;
     int queryCap;
 } Rule;
+// Declare all the initial stuff
+int ruleCount = 0, reqPos = 0, reqCap = 10;
 
+char *reqs;
+Rule *rules;
+int rulePos = 0;
+int ruleCap = MAX_RULE_CAP;
 void error(char *msg)
 {
     perror(msg);
@@ -76,9 +82,10 @@ int validatePort(char *port) {
     return 1;
 }
 
-char* printRequests(int mode, char* reqs, int pos) {
+char* printRequests() {
+    pthread_mutex_lock(&mut);
     // Allocate initial memory for the result string
-    size_t resultSize = pos * 3 + 1; // Each request will add 2 characters (comma and request) + null terminator
+    size_t resultSize = reqPos * 3 + 1; // Each request will add 2 characters (comma and request) + null terminator
     char* result = (char*)malloc(resultSize);
     if (!result) {
         fprintf(stderr, "Memory allocation failed!\n");
@@ -86,7 +93,7 @@ char* printRequests(int mode, char* reqs, int pos) {
     }
     result[0] = '\0'; // Initialize the result string
     //Loop through the request array, printing each one
-    for (int i=0; i<pos; i++) {
+    for (int i=0; i<reqPos; i++) {
         char next[2];
         next[0] = reqs[i];
         next[1] = '\0';
@@ -95,105 +102,177 @@ char* printRequests(int mode, char* reqs, int pos) {
         }
         strcat(result, next);
     }
+    pthread_mutex_unlock(&mut);
     return result;
 }
 
-char* addRule(int mode, char inp[], int pos, int cap, Rule* rules) {
-    char* result = malloc(50*sizeof(char));
-    // Checks if we need to add more memory to the rules list.
-    if (pos >= cap)
+char *addRule(char* inp)
+{
+    pthread_mutex_lock(&mut);
+    char *result = malloc(50 * sizeof(char));
+    if (!result)
     {
-        cap *= 2;
-        rules = (Rule *)realloc(rules, cap * sizeof(Rule));
+        pthread_mutex_unlock(&mut);
+        return NULL;
     }
-    //Split IP & Port & check validation
+
+    // Checks if we need to add more memory to the rules list.
+    if (rulePos >= ruleCap)
+    {
+        ruleCap *= 2;
+        Rule *newRules = (Rule *)realloc(rules, ruleCap * sizeof(Rule));
+        if (!newRules)
+        {
+            strcpy(result, "Memory allocation failed\n");
+            pthread_mutex_unlock(&mut);
+            return result;
+        }
+        rules = newRules;
+    }
+
+    // Split IP & Port & check validation
     char ips[50], ports[50];
-    if (sscanf(inp, "%s %s", ips, ports) != 2) {
+    if (sscanf(inp, "%s %s", ips, ports) != 2)
+    {
         strcpy(result, "Invalid rule\n");
+        pthread_mutex_unlock(&mut);
         return result;
     }
-    //Check the IP and split if nescessary, then verify, and add to the rules list
-    if (strchr(ips, '-')) { //Multiple case
+
+    // Check the IP and split if necessary, then verify, and add to the rules list
+    if (strchr(ips, '-'))
+    { // Multiple case
         char ip1[20], ip2[20];
         sscanf(ips, "%[^-]-%s", ip1, ip2);
-        if (validateIp(ip1) == -1 || validateIp(ip2) == -1) {
+        if (validateIp(ip1) == -1 || validateIp(ip2) == -1)
+        {
             strcpy(result, "Invalid rule\n");
+            pthread_mutex_unlock(&mut);
             return result;
-        } else {
-            if (compareIps(ip1, ip2) == -1) {
-                strcpy(result, "Invalid rule\n");
-                return result;
-            } else { //Add to rules list
-                strcpy(rules[pos].ip[0], ip1);
-                strcpy(rules[pos].ip[1], ip2);
-            }
         }
-    } else { //Single case
-        if (validateIp(ips) == -1) {
-            strcpy(result, "Invalid rule\n");
-            return result;
-        } else {
-            strcpy(rules[pos].ip[0], ips);
-            strcpy(rules[pos].ip[1], "#");
+        else
+        {
+            if (compareIps(ip1, ip2) == -1)
+            {
+                strcpy(result, "Invalid rule\n");
+                pthread_mutex_unlock(&mut);
+                return result;
+            }
+            else
+            { // Add to rules list
+                strcpy(rules[rulePos].ip[0], ip1);
+                strcpy(rules[rulePos].ip[1], ip2);
+            }
         }
     }
-    //Check the port and split if nescessary, then verify, and add to the rules list
-    if (strchr(ports, '-')) { //Multiple case
-            char port1[10], port2[20];
-            sscanf(ports, "%[^-]-%s", port1, port2);
-            if (validatePort(port1) == -1 || validatePort(port2) == -1 || port2 <= port1) {
-                strcpy(result, "Invalid rule\n");
-                return result;
-            } else {
-                rules[pos].ports[0] = atoi(port1);
-                rules[pos].ports[1] = atoi(port2);
-            }
-        } else { //Single case
-            if (validatePort(ports) == -1) {
-                strcpy(result, "Invalid rule\n");
-                return result;
-            } else {
-                rules[pos].ports[0] = atoi(ports);
-                rules[pos].ports[1] = -1;
-            }
-        }
-        rules[pos].queryCount = 0;
-        rules[pos].queryCap = 10; // Initial capacity for queries
-        rules[pos].queries = (char **)malloc(rules[pos].queryCap * sizeof(char *));
-        for (int i = 0; i < rules[pos].queryCap; i++)
+    else
+    { // Single case
+        if (validateIp(ips) == -1)
         {
-            rules[pos].queries[i] = (char *)malloc(30 * sizeof(char)); // Allocate space for each query
+            strcpy(result, "Invalid rule\n");
+            pthread_mutex_unlock(&mut);
+            return result;
         }
+        else
+        {
+            strcpy(rules[rulePos].ip[0], ips);
+            strcpy(rules[rulePos].ip[1], "#");
+        }
+    }
+
+    // Check the port and split if necessary, then verify, and add to the rules list
+    if (strchr(ports, '-'))
+    { // Multiple case
+        char port1[10], port2[20];
+        sscanf(ports, "%[^-]-%s", port1, port2);
+        if (validatePort(port1) == -1 || validatePort(port2) == -1 || atoi(port2) <= atoi(port1))
+        {
+            strcpy(result, "Invalid rule\n");
+            pthread_mutex_unlock(&mut);
+            return result;
+        }
+        else
+        {
+            rules[rulePos].ports[0] = atoi(port1);
+            rules[rulePos].ports[1] = atoi(port2);
+        }
+    }
+    else
+    { // Single case
+        if (validatePort(ports) == -1)
+        {
+            strcpy(result, "Invalid rule\n");
+            pthread_mutex_unlock(&mut);
+            return result;
+        }
+        else
+        {
+            rules[rulePos].ports[0] = atoi(ports);
+            rules[rulePos].ports[1] = -1;
+        }
+    }
+
+    rules[rulePos].queryCount = 0;
+    rules[rulePos].queryCap = 10; // Initial capacity for queries
+    rules[rulePos].queries = (char **)malloc(rules[rulePos].queryCap * sizeof(char *));
+    if (!rules[rulePos].queries)
+    {
+        strcpy(result, "Memory allocation failed\n");
+        pthread_mutex_unlock(&mut);
+        return result;
+    }
+    for (int i = 0; i < rules[rulePos].queryCap; i++)
+    {
+        rules[rulePos].queries[i] = (char *)malloc(30 * sizeof(char)); // Allocate space for each query
+        if (!rules[rulePos].queries[i])
+        {
+            for (int j = 0; j < i; j++)
+            {
+                free(rules[rulePos].queries[j]);
+            }
+            free(rules[rulePos].queries);
+            strcpy(result, "Memory allocation failed\n");
+            pthread_mutex_unlock(&mut);
+            return result;
+        }
+    }
+
     // Print response
-    strcpy(result,"Rule added\n");
+    strcpy(result, "Rule added\n");
+    pthread_mutex_unlock(&mut);
     return result;
 }
-char* queryRule(int mode, char inp[], Rule* rules, int ruleCount) {
+
+char* queryRule(char inp[]) {
+    pthread_mutex_lock(&mut);
     char* result = malloc(100*sizeof(char));
     // Split IP & Port & check validation
     char ip[50], port[50];
     if (sscanf(inp, "%s %s", ip, port) != 2)
     {
         strcpy(result, "Illegal IP address or port specified\n");
+        pthread_mutex_unlock(&mut);
         return result;
     }
     // Check the IP 
     if (validateIp(ip) == -1)
     {
         strcpy(result, "Illegal IP address or port specified\n");
+        pthread_mutex_unlock(&mut);
         return result;
     }
     // Check the port
     if (validatePort(port) == -1)
     {
         strcpy(result, "Illegal IP address or port specified\n");
+        pthread_mutex_unlock(&mut);
         return result;
     }
     //Checks against rules
     for (int i=0; i<ruleCount; i++) {
         //Check IP First
         if ((rules[i].ip[1][0] == '#')) { //Single IP case
-            if (!(strcmp(rules[i].ip[0], inp) == 0))
+            if (!(strcmp(rules[i].ip[0], ip) == 0))
             {
                 printf("single Ip comparison failed\n");
                 continue;
@@ -230,9 +309,11 @@ char* queryRule(int mode, char inp[], Rule* rules, int ruleCount) {
         strcpy(rules[i].queries[rules[i].queryCount], inp);
         rules[i].queryCount++;
         strcpy(result, "Connection accepted\n");
+        pthread_mutex_unlock(&mut);
         return result;
     }
     strcpy(result, "Connection rejected\n");
+    pthread_mutex_unlock(&mut);
     return result;
 }
 char* rejoinRule(Rule rule, char* result)
@@ -265,12 +346,14 @@ char* rejoinRule(Rule rule, char* result)
     return result;
 }
 char* deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
+    pthread_mutex_lock(&mut);
     char* result = malloc(50*sizeof(char));
     // Split IP & Port & check validation
     char ips[50], ports[50];
     if (sscanf(inp, "%s %s", ips, ports) != 2)
     {
         strcpy(result, "Rule invalid\n");
+        pthread_mutex_unlock(&mut);
         return result;
     }
     if (strchr(ips, '-'))
@@ -280,6 +363,7 @@ char* deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
         if (validateIp(ip1) == -1 || validateIp(ip2) == -1)
         {
             strcpy(result, "Rule invalid\n");
+            pthread_mutex_unlock(&mut);
             return result;
         }
         else
@@ -287,6 +371,7 @@ char* deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
             if (compareIps(ip1, ip2) == -1)
             {
                 strcpy(result, "Rule invalid\n");
+                pthread_mutex_unlock(&mut);
                 return result;
             }
         }
@@ -296,6 +381,7 @@ char* deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
         if (validateIp(ips) == -1)
         {
             strcpy(result, "Rule invalid\n");
+            pthread_mutex_unlock(&mut);
             return result;
         }
     }
@@ -303,9 +389,10 @@ char* deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
     { // Multiple case
         char port1[10], port2[20];
         sscanf(ports, "%[^-]-%s", port1, port2);
-        if (validatePort(port1) == -1 || validatePort(port2) == -1 || port2 <= port1)
+        if (validatePort(port1) == -1 || validatePort(port2) == -1 || atoi(port2) <= atoi(port1))
         {
             strcpy(result, "Rule invalid\n");
+            pthread_mutex_unlock(&mut);
             return result;
         }
     }
@@ -314,6 +401,7 @@ char* deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
         if (validatePort(ports) == -1)
         {
             strcpy(result, "Rule invalid\n");
+            pthread_mutex_unlock(&mut);
             return result;
         }
     }
@@ -334,10 +422,12 @@ char* deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
                 rules[j] = rules[j + 1];
             }
             strcpy(result, "Rule deleted\n");
+            pthread_mutex_unlock(&mut);
             return result;
         }
     }
     strcpy(result, "Rule invalid\n");
+    pthread_mutex_unlock(&mut);
     return result;
 }
 char* listRules(int mode, Rule* rules, int ruleCount) {
@@ -387,29 +477,32 @@ char* listRules(int mode, Rule* rules, int ruleCount) {
             }
         }
     }
-
+    pthread_mutex_unlock(&mut);
     return result;
 }
-void interactiveMode(int ruleCount, char* reqs, int reqPos, int reqCap, Rule* rules, int rulePos, int ruleCap) {
+void interactiveMode() {
     // Interactive mode
     // Declare the requests list and allocate mem for 10
-    
     while (1) {
-        
-        //Checks if we need to add more memory to the request list.
-        if (reqPos >= reqCap) {
-            reqCap *= 2;
-            reqs = (char*)realloc(reqs, reqCap*sizeof(char));
-        }
         char nextReq;
         char inp[50]; 
-        scanf(" %c", &nextReq);
+        if (scanf(" %c", &nextReq) == EOF) {
+            break;
+        }
         if (nextReq != 'R' && nextReq != 'L') {
-            scanf(" %[^\n]", inp);
+            if ((scanf(" %[^\n]", inp)) == EOF) {
+                break;
+            }
         }
 
         int ch;
-        while ((ch = getchar()) != '\n' && ch != EOF); 
+        while ((ch = getchar()) != '\n' && ch != EOF);
+        // Checks if we need to add more memory to the request list.
+        if (reqPos >= reqCap)
+        {
+            reqCap *= 2;
+            reqs = (char *)realloc(reqs, reqCap * sizeof(char));
+        }
         //Accept next Request, add to list
         reqs[reqPos] = nextReq;
         reqPos++;
@@ -417,14 +510,14 @@ void interactiveMode(int ruleCount, char* reqs, int reqPos, int reqCap, Rule* ru
         //Process the request:
         switch (nextReq) {
             case 'R':
-                char* resultR = printRequests(1, reqs, reqPos);
-                printf("%s\n", resultR);
+                char* resultR = printRequests();
+                printf("%s", resultR);
                 free(resultR);
                 break;
             case 'A':
-                char* resultA = addRule(1, inp, rulePos, ruleCap, rules);
+                char* resultA = addRule(inp);
                 if (strcmp(resultA, "Rule added\n") == 0) {
-                    ruleCount++; 
+                    ruleCount++;
                     rulePos++;
                     printf("%s", resultA);
                     free(resultA);
@@ -432,10 +525,9 @@ void interactiveMode(int ruleCount, char* reqs, int reqPos, int reqCap, Rule* ru
                     printf("%s", resultA);
                     free(resultA);
                 }
-                printf("Rule count: %d\n", ruleCount);
                 break;
             case 'C':
-                char* resultC = queryRule(1, inp, rules, ruleCount);
+                char* resultC = queryRule(inp);
                 printf("%s", resultC);
                 free(resultC);
                 break;
@@ -514,63 +606,75 @@ char *readRes(int sockfd) {
 
 void *processRequest (void *args) {
     int *newsockfd =  (int *) args;   
-    int n;
-    int tmp;
     char *buffer;
     buffer = readRes (*newsockfd);
     if (!buffer)  {
 		fprintf (stderr, "ERROR reading from socket\n");
     }
     else {
-        printf ("Here is the request: %s\n",buffer);
-        //Process the request:
-        /*
-        switch (*buffer) {
-            case 'R':
-                printRequests(0, reqs, reqPos);
-                break;
-            case 'A':
-                if (addRule(0, inp, rulePos, ruleCap, rules) == 1) {
-                    ruleCount++; 
-                    rulePos++;
-                }
-                printf("Rule count: %d\n", ruleCount);
-                break;
-            case 'C':
-                queryRule(1, inp, rules, ruleCount);
-                break;
-            case 'D':
-                deleteRule(1, inp, rules, ruleCount);
-                break;
-            case 'L':
-                listRules(1, rules, ruleCount);
-                break;
-            default:
-                printf("Invalid request\n");
-                break;
+        char inp = buffer[0];
+        char args[100] = "";
+        if (inp != 'R' && inp != 'L')
+        {
+            sscanf(buffer+1, " %[^\n]", args);
         }
-        */
-        /*
-        printf ("Here is the message: %s\n",buffer);
-		pthread_mutex_lock (&mut); // lock exclusive access to variable isExecuted 
-		tmp = isExecuted;
-			
-		printf ("Waiting for confirmation: Please input an integer\n");
-		scanf ("%d", &n); // not to be done in real programs: don't go to sleep while holding a lock! Done here to demonstrate the mutual exclusion problem. 
-		printf ("Read value %d\n", n);
-
-		isExecuted = tmp +1;
-		pthread_mutex_unlock (&mut); // release the lock 
-		
-		buffer = realloc(buffer, BUFFERLENGTH);
-		n = sprintf (buffer, "I got you message, the value of isExecuted is %d\n", isExecuted);
-		// send the reply back 
-		n = writeResult (*newsockfd, buffer, strlen(buffer) + 1);
-		if (n < 0) {
-			fprintf (stderr, "Error writing to socket\n");
-		}
-        */
-		
+        printf ("Here is the request: %s\n", buffer);
+        // Checks if we need to add more memory to the request list.
+        if (reqPos >= reqCap)
+        {
+            reqCap *= 2;
+            reqs = (char *)realloc(reqs, reqCap * sizeof(char));
+        }
+        // Accept next Request, add to list
+        reqs[reqPos] = inp;
+        reqPos++;
+        // Process the request:
+        switch (inp) {
+        case 'R':
+            char *resultR = printRequests();
+            writeResult(*newsockfd, resultR, strlen(resultR) + 1);
+            free(resultR);
+            break;
+        case 'A':
+            char *resultA = addRule(args);
+            if (strcmp(resultA, "Rule added\n") == 0)
+            {
+                ruleCount++;
+                rulePos++;
+                writeResult(*newsockfd, resultA, strlen(resultA) + 1);
+                free(resultA);
+            }
+            else
+            {
+                writeResult(*newsockfd, resultA, strlen(resultA) + 1);
+                free(resultA);
+            }
+            break;
+        case 'C':
+            char *resultC = queryRule(args);
+            writeResult(*newsockfd, resultC, strlen(resultC) + 1);
+            free(resultC);
+            break;
+        case 'D':
+            char *resultD = deleteRule(1, args, rules, ruleCount);
+            if (strcmp(resultD, "Rule deleted\n") == 0)
+            {
+                ruleCount--;
+                rulePos--;
+            }
+            writeResult(*newsockfd, resultD, strlen(resultD) + 1);
+            free(resultD);
+            break;
+        case 'L':
+            char *resultL = listRules(1, rules, ruleCount);
+            writeResult(*newsockfd, resultL, strlen(resultL) + 1);
+            free(resultL);
+            break;
+        default:
+            char* invalidResponse = "Invalid request\n";
+            writeResult(*newsockfd, invalidResponse, strlen(invalidResponse) + 1);
+            break;
+        }
     }
 
     free(buffer);
@@ -581,28 +685,17 @@ void *processRequest (void *args) {
 }
 // Main Loop for the server program
 int main (int argc, char ** argv) {
-
-
-    int ruleCount =0;
-    char *reqs;
-    int reqPos = 0, reqCap=10;
+    //Allocate initial memory for the request and rule lists
     reqs = (char*)malloc(reqCap*sizeof(char));
-    // Declare the rules list and allocate memory
-    Rule *rules;
-    int rulePos = 0; int ruleCap=10;
     rules = (Rule*)malloc(ruleCap*sizeof(Rule));
-
-
     //Check for interactive mode first as to not waste memory
     int result;
     socklen_t clilen;
     int sockfd, newsockfd, portno;
-    char buffer[BUFFERLENGTH];
-    struct sockaddr_in6 serv_addr, cli_addr;
-    int n;
+    struct sockaddr_in6 serv_addr;
     if (argc >= 2) {
         if (strcmp(argv[1], "-i") == 0) {
-            interactiveMode(ruleCount, reqs, reqPos, reqCap, rules, rulePos, ruleCap);
+            interactiveMode();
         } else {
             if (atoi(argv[1]) > 0 && atoi(argv[1]) <= MAX_PORT ) {
                 /* create socket */
@@ -621,14 +714,7 @@ int main (int argc, char ** argv) {
                 }
                 /* ready to accept connections */
                 listen(sockfd,5);
-                // Declare the requests list and allocate mem for 10
-                int ruleCount =0;
-                char *reqs;
-                int reqPos = 0, reqCap=10;
                 reqs = (char*)malloc(reqCap*sizeof(char));
-                // Declare the rules list and allocate memory
-                Rule *rules;
-                int rulePos = 0; int ruleCap=10;
                 rules = (Rule*)malloc(ruleCap*sizeof(Rule));
                 
             } else {
@@ -672,7 +758,6 @@ int main (int argc, char ** argv) {
         }
 
         result = pthread_create (&server_thread, &pthread_attr, processRequest, (void *) newsockfd);
-        printf("checkmark\n");
         if (result != 0) {
 			fprintf (stderr, "Thread creation failed!\n");
 			exit (1);
