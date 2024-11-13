@@ -1,1 +1,1 @@
-Rule added
+Rule invalid

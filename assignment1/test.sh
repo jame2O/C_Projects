@@ -26,27 +26,27 @@ function run(){
 function checkConnection() {
     sleep 0.1
     case `netstat -a -n -p 2>/dev/null| grep $PORT `  in
-	*":2000"*"LISTEN"*"server"*)
+	*":$port"*"LISTEN"*"server"*)
 	    return 1;;
     esac
     sleep 0.2
     case `netstat -a -n -p 2>/dev/null| grep $PORT`  in
-	*":2000"*"LISTEN"*"server"*)
+	*":$port"*"LISTEN"*"server"*)
 	    return 1;;
     esac
     sleep 0.2
     case `netstat -a -n -p 2>/dev/null| grep $PORT`  in
-	*":2000"*"LISTEN"*"server"*)
+	*":$port"*"LISTEN"*"server"*)
 	    return 1;;
     esac
     sleep 0.2
     case `netstat -a -n -p 2>/dev/null| grep $PORT`  in
-	*":2000"*"LISTEN"*"server"*)
+	*":$port"*"LISTEN"*"server"*)
 	    return 1;;
     esac
     sleep 0.2
     case `netstat -a -n -p 2>/dev/null| grep $PORT`  in
-	*":2000"*"LISTEN"*"server"*)
+	*":$port"*"LISTEN"*"server"*)
 	    return 1;;
     esac
     return 0

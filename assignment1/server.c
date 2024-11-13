@@ -78,14 +78,14 @@ int compareIps(char* ip1, char* ip2) {
 }
 int validatePort(char *port) {
     //Port Validation
-    if (atoi(port) < 0 || atoi(port) > MAX_PORT) return -1;
+    if (atoi(port) <= 0 || atoi(port) > MAX_PORT) return -1;
     return 1;
 }
 
 char* printRequests() {
     pthread_mutex_lock(&mut);
     // Allocate initial memory for the result string
-    size_t resultSize = reqPos * 3 + 1; // Each request will add 2 characters (comma and request) + null terminator
+    size_t resultSize = reqPos * 2 + 1; // Each request will add 2 characters (comma and request) + null terminator
     char* result = (char*)malloc(resultSize);
     if (!result) {
         fprintf(stderr, "Memory allocation failed!\n");
@@ -97,10 +97,8 @@ char* printRequests() {
         char next[2];
         next[0] = reqs[i];
         next[1] = '\0';
-        if (i > 0) {
-            strcat(result, ",");
-        }
         strcat(result, next);
+        strcat(result, "\n");
     }
     pthread_mutex_unlock(&mut);
     return result;
@@ -274,25 +272,21 @@ char* queryRule(char inp[]) {
         if ((rules[i].ip[1][0] == '#')) { //Single IP case
             if (!(strcmp(rules[i].ip[0], ip) == 0))
             {
-                printf("single Ip comparison failed\n");
                 continue;
             }
         } else { //Multiple IP case
             if (!(compareIps(rules[i].ip[0], ip) == 1 && compareIps(inp, rules[i].ip[1]) == 1))
             {
-                printf("mulitple Ip comparison failed\n");
                 continue;
             }
         }
         //Now check ports
         if (rules[i].ports[1] != -1) { //Multiple port case
             if (!(atoi(port) >= rules[i].ports[0] && atoi(port) <= rules[i].ports[1])) {
-                printf("multiple port comparison failed\n");
                 continue;
             }
         } else { //Single port case
             if (!(atoi(port) == rules[i].ports[0])) {
-                printf("Single port comparison failed\n");
                 continue;
             }
         }
@@ -345,7 +339,7 @@ char* rejoinRule(Rule rule, char* result)
     snprintf(result, 70, "%s %s", ipPart, portPart);
     return result;
 }
-char* deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
+char* deleteRule(char inp[]) {
     pthread_mutex_lock(&mut);
     char* result = malloc(50*sizeof(char));
     // Split IP & Port & check validation
@@ -430,7 +424,7 @@ char* deleteRule(int mode, char inp[], Rule* rules, int ruleCount) {
     pthread_mutex_unlock(&mut);
     return result;
 }
-char* listRules(int mode, Rule* rules, int ruleCount) {
+char* listRules() {
     size_t resultSize = 1024; // Initial size for the result string
     char* result = (char*)malloc(resultSize);
     if (!result) {
@@ -532,7 +526,7 @@ void interactiveMode() {
                 free(resultC);
                 break;
             case 'D':
-                char* resultD = deleteRule(1, inp, rules, ruleCount);
+                char* resultD = deleteRule(inp);
                 if (strcmp(resultD, "Rule deleted\n") == 0) {
                     ruleCount--;
                     rulePos--;
@@ -656,7 +650,7 @@ void *processRequest (void *args) {
             free(resultC);
             break;
         case 'D':
-            char *resultD = deleteRule(1, args, rules, ruleCount);
+            char *resultD = deleteRule(args);
             if (strcmp(resultD, "Rule deleted\n") == 0)
             {
                 ruleCount--;
@@ -678,9 +672,8 @@ void *processRequest (void *args) {
     }
 
     free(buffer);
-    close(*newsockfd); /* important to avoid memory leak */
-    free (newsockfd);
-	  
+    close(*newsockfd);
+    free(newsockfd); 
     pthread_exit (NULL); /*exit value not used */
 }
 // Main Loop for the server program
@@ -714,8 +707,6 @@ int main (int argc, char ** argv) {
                 }
                 /* ready to accept connections */
                 listen(sockfd,5);
-                reqs = (char*)malloc(reqCap*sizeof(char));
-                rules = (Rule*)malloc(ruleCap*sizeof(Rule));
                 
             } else {
                 printf("Invalid argument\n");
@@ -756,15 +747,25 @@ int main (int argc, char ** argv) {
             fprintf(stderr, "ERROR on thread attrs setting");
             exit(1);
         }
-
         result = pthread_create (&server_thread, &pthread_attr, processRequest, (void *) newsockfd);
         if (result != 0) {
 			fprintf (stderr, "Thread creation failed!\n");
 			exit (1);
 		}
     }
-    
     close(newsockfd);
+
+    //Free memory when we are done
+    for (int i = 0; i < ruleCount; i++)
+    {
+        for (int j = 0; j < rules[i].queryCap; j++)
+        {
+            free(rules[i].queries[j]);
+        }
+        free(rules[i].queries);
+    }
+    free(reqs);
+    free(rules);/* important to avoid memory leak */
     return 0;
 }
 

@@ -157,9 +157,9 @@ int main(int argc, char *argv[])
     /* wait for reply */
     free(buffer);
     buffer = readRes (sockfd);
-    printf ("%s\n", buffer);
+    printf ("%s", buffer);
     close(sockfd);
-    
+    free(buffer);
     return 0;
 }
 
